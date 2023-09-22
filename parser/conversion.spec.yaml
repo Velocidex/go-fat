@@ -1,0 +1,9 @@
+Module: parser
+Profile: FATProfile
+Filename: fat_profile.json
+GenerateDebugString: true
+Structs:
+  - MBR
+  - DirectoryListing
+  - FolderEntry
+  - LFNEntry

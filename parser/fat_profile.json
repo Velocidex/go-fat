@@ -1,0 +1,54 @@
+{
+    "MBR": [512, {
+        "Oemname": [3, ["String", {"length": 8}]],
+        "Bytes_per_sector": [11, ["unsigned short"]],
+        "Sectors_per_cluster": [13, ["unsigned char"]],
+        "Reserved_sectors": [14, ["unsigned short"]],
+        "Number_of_fats": [16, ["unsigned char"]],
+        "Root_entries": [17, ["unsigned short"]],
+        "Small_sectors": [19, ["unsigned short"]],
+        "Sectors_per_fat": [22, ["unsigned short"]],
+        "Large_sectors": [32, ["unsigned long"]],
+        "Signature": [38, ["unsigned char"]],
+        "Volume_serial_number": [39, ["unsigned long"]],
+        "Volume_label": [43, ["String", {"length": 11}]],
+        "System_id": [54, ["String", {"length": 8}]],
+        "Magic": [510, ["unsigned short"]]
+    }],
+    "DirectoryListing": [0, {
+        "Entries": [0, ["Array", {
+            "count": 512,
+            "target": "FolderEntry"
+        }]]
+    }],
+    "FolderEntry": [32, {
+        "Name": [0, ["String", {"length": 11}]],
+        "Attribute": [11, ["Flags", {
+            "target": "unsigned char",
+            "maskmap": {
+                "READ_ONLY": 1,
+                "HIDDEN": 2,
+                "SYSTEM": 4,
+                "VOLUME_ID": 8,
+                "DIRECTORY": 16,
+                "ARCHIVE": 32,
+                "LFN": 15
+            }
+        }]],
+        "_CreateTimeTenthSeconds": [13, ["unsigned char"]],
+        "_CreateTime": [14, ["unsigned short"]],
+        "_CreateDate": [16, ["unsigned short"]],
+        "_LastAccessDate": [18, ["unsigned short"]],
+        "_ClusterHigh": [20, ["unsigned short"]],
+        "_LastModTime": [22, ["unsigned short"]],
+        "_LastModDate": [24, ["unsigned short"]],
+        "_ClusterLow": [26, ["unsigned short"]],
+        "FileSize": [28, ["unsigned long"]]
+    }],
+    "LFNEntry": [32, {
+        "Order": [0, ["char"]],
+        "Name1": [1, ["UnicodeString", {"length": 10}]],
+        "Name2": [14, ["UnicodeString", {"length": 12}]],
+        "Name3": [28, ["UnicodeString", {"length": 4}]]
+    }]
+}
