@@ -17,13 +17,19 @@ type FATContext struct {
 	DiskReader        io.ReaderAt
 	Profile           *FATProfile
 	MBR               *MBR
-	bytes_per_cluster int64
+	FAT32MBR          *FAT32MBR
+	Bytes_per_cluster int64
 
-	bytes_per_sector int64
-	total_sectors    int64
-	root_dir_sectors int64
-	data_sectors     int64
-	total_clusters   int64
+	Bytes_per_sector    int64
+	Sectors_per_cluster int64
+	total_sectors       int64
+	root_dir_sectors    int64
+	data_sectors        int64
+	total_clusters      int64
+
+	number_of_fats   int64
+	sectors_per_fat  int64
+	reserved_sectors int64
 
 	root_directory io.ReaderAt
 }
@@ -34,12 +40,17 @@ func (self *FATContext) FATType() string {
 		return "ExFAT"
 	}
 
-	total_clusters := self.total_sectors * self.bytes_per_sector /
-		self.bytes_per_cluster
+	if self.FAT32MBR != nil {
+		return "FAT32"
+	}
+
+	total_clusters := self.total_sectors * self.Bytes_per_sector /
+		self.Bytes_per_cluster
 
 	if total_clusters < 4085 {
 		return "FAT12"
 	}
+
 	if total_clusters < 65525 {
 		return "FAT16"
 	}
@@ -48,19 +59,23 @@ func (self *FATContext) FATType() string {
 
 func (self *FATContext) DebugString() string {
 	result := self.MBR.DebugString()
+
+	if self.FAT32MBR != nil {
+		result += "\n" + self.FAT32MBR.DebugString()
+	}
+
 	result += fmt.Sprintf("\nOffset of root directory %v\n", self.rootOffset())
-	result += fmt.Sprintf("bytes_per_sector %v\n", self.bytes_per_sector)
+	result += fmt.Sprintf("bytes_per_sector %v\n", self.Bytes_per_sector)
 	result += fmt.Sprintf("total_sectors %v\n", self.total_sectors)
-	result += fmt.Sprintf("bytes_per_cluster %v\n", self.bytes_per_cluster)
+	result += fmt.Sprintf("bytes_per_cluster %v\n", self.Bytes_per_cluster)
 	result += fmt.Sprintf("FAT Type %v\n", self.FATType())
 
 	return result
 }
 
 func (self *FATContext) rootOffset() int64 {
-	return int64(
-		(self.MBR.Reserved_sectors() +
-			uint16(self.MBR.Number_of_fats())*self.MBR.Sectors_per_fat()) * self.MBR.Bytes_per_sector())
+	return (self.reserved_sectors +
+		self.number_of_fats*self.sectors_per_fat) * self.Bytes_per_sector
 }
 
 func (self *FATContext) ListDirectory(path string) ([]*DirectoryEntry, error) {
@@ -78,7 +93,10 @@ func (self *FATContext) ListDirectory(path string) ([]*DirectoryEntry, error) {
 		return nil, errors.New("Not a directory")
 	}
 
-	return self.listDirectory(stream, 512), nil
+	// The number of entries is related to the total size of the
+	// stream.
+	directory_size := int(stream.file_size()) / 32
+	return self.listDirectory(stream, directory_size), nil
 }
 
 func (self *FATContext) ICat(first_cluster int32) (io.ReaderAt, error) {
@@ -92,13 +110,34 @@ func GetFATContext(reader io.ReaderAt) (*FATContext, error) {
 	}
 
 	result.MBR = result.Profile.MBR(reader, 0)
-	result.bytes_per_cluster = int64(result.MBR.Bytes_per_sector()) *
-		int64(result.MBR.Sectors_per_cluster())
 
-	result.bytes_per_sector = int64(result.MBR.Bytes_per_sector())
-	if result.bytes_per_sector == 0 {
+	// Check signature - if it is invalid then try to open as FAT32
+	sig := result.MBR.Signature()
+	if sig != 0x28 && sig != 0x29 {
+		// Maybe this is a fat32
+		result.FAT32MBR = result.Profile.FAT32MBR(reader, 0)
+
+		sig = result.FAT32MBR.Signature()
+		if sig != 0x28 && sig != 0x29 {
+			return nil, errors.New("Invalid signature")
+		}
+		result.sectors_per_fat = int64(result.FAT32MBR.SectorsPerFat())
+
+	} else {
+		result.sectors_per_fat = int64(result.MBR.Sectors_per_fat())
+
+	}
+
+	result.Bytes_per_sector = int64(result.MBR.Bytes_per_sector())
+	if result.Bytes_per_sector == 0 {
 		return nil, errors.New("invalid bytes_per_sector")
 	}
+
+	result.Sectors_per_cluster = int64(result.MBR.Sectors_per_cluster())
+	result.reserved_sectors = int64(result.MBR.Reserved_sectors())
+	result.number_of_fats = int64(result.MBR.Number_of_fats())
+	result.Bytes_per_cluster = result.Bytes_per_sector *
+		result.Sectors_per_cluster
 
 	result.total_sectors = int64(result.MBR.Small_sectors())
 	if result.total_sectors == 0 {

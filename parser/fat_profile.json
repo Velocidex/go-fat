@@ -15,6 +15,17 @@
         "System_id": [54, ["String", {"length": 8}]],
         "Magic": [510, ["unsigned short"]]
     }],
+    "FAT32MBR": [512, {
+        "SectorsPerFat": [36, ["unsigned long"]],
+        "Flags": [40, ["unsigned short"]],
+        "Version": [42, ["unsigned short"]],
+        "ClusterOfRoot": [44, ["unsigned long"]],
+        "Signature": [66, ["unsigned char"]],
+        "Volume_serial_number": [67, ["unsigned long"]],
+        "Volume_label": [71,  ["String", {"length": 11}]],
+        "System_id": [82, ["String", {"length": 8}]],
+        "Magic": [510, ["unsigned short"]]
+    }],
     "DirectoryListing": [0, {
         "Entries": [0, ["Array", {
             "count": 512,
@@ -46,7 +57,7 @@
         "FileSize": [28, ["unsigned long"]]
     }],
     "LFNEntry": [32, {
-        "Order": [0, ["char"]],
+        "Order": [0, ["unsigned char"]],
         "Name1": [1, ["UnicodeString", {"length": 10}]],
         "Name2": [14, ["UnicodeString", {"length": 12}]],
         "Name3": [28, ["UnicodeString", {"length": 4}]]

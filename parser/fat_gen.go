@@ -39,6 +39,15 @@ func indent(text string) string {
 
 type FATProfile struct {
     Off_DirectoryListing_Entries int64
+    Off_FAT32MBR_SectorsPerFat int64
+    Off_FAT32MBR_Flags int64
+    Off_FAT32MBR_Version int64
+    Off_FAT32MBR_ClusterOfRoot int64
+    Off_FAT32MBR_Signature int64
+    Off_FAT32MBR_Volume_serial_number int64
+    Off_FAT32MBR_Volume_label int64
+    Off_FAT32MBR_System_id int64
+    Off_FAT32MBR_Magic int64
     Off_FolderEntry_Name int64
     Off_FolderEntry_Attribute int64
     Off_FolderEntry__CreateTimeTenthSeconds int64
@@ -72,12 +81,16 @@ type FATProfile struct {
 
 func NewFATProfile() *FATProfile {
     // Specific offsets can be tweaked to cater for slight version mismatches.
-    self := &FATProfile{0,0,11,13,14,16,18,20,22,24,26,28,0,1,14,28,3,11,13,14,16,17,19,22,32,38,39,43,54,510}
+    self := &FATProfile{0,36,40,42,44,66,67,71,82,510,0,11,13,14,16,18,20,22,24,26,28,0,1,14,28,3,11,13,14,16,17,19,22,32,38,39,43,54,510}
     return self
 }
 
 func (self *FATProfile) DirectoryListing(reader io.ReaderAt, offset int64) *DirectoryListing {
     return &DirectoryListing{Reader: reader, Offset: offset, Profile: self}
+}
+
+func (self *FATProfile) FAT32MBR(reader io.ReaderAt, offset int64) *FAT32MBR {
+    return &FAT32MBR{Reader: reader, Offset: offset, Profile: self}
 }
 
 func (self *FATProfile) FolderEntry(reader io.ReaderAt, offset int64) *FolderEntry {
@@ -112,6 +125,131 @@ func (self *DirectoryListing) Entries() []*FolderEntry {
 }
 func (self *DirectoryListing) DebugString() string {
     result := fmt.Sprintf("struct DirectoryListing @ %#x:\n", self.Offset)
+    return result
+}
+
+type FAT32MBR struct {
+    Reader io.ReaderAt
+    Offset int64
+    Profile *FATProfile
+    
+    _SectorsPerFat uint32
+    _SectorsPerFat_cached bool
+
+    _Flags uint16
+    _Flags_cached bool
+
+    _Version uint16
+    _Version_cached bool
+
+    _ClusterOfRoot uint32
+    _ClusterOfRoot_cached bool
+
+    _Signature uint8
+    _Signature_cached bool
+
+    _Volume_serial_number uint32
+    _Volume_serial_number_cached bool
+
+    _Magic uint16
+    _Magic_cached bool
+
+}
+
+func (self *FAT32MBR) Size() int {
+    return 512
+}
+
+func (self *FAT32MBR) SectorsPerFat() uint32 {
+   if self._SectorsPerFat_cached {
+      return self._SectorsPerFat
+   }
+   result := ParseUint32(self.Reader, self.Profile.Off_FAT32MBR_SectorsPerFat + self.Offset)
+   self._SectorsPerFat = result
+   self._SectorsPerFat_cached = true
+   return result
+}
+
+func (self *FAT32MBR) Flags() uint16 {
+   if self._Flags_cached {
+       return self._Flags
+   }
+   result := ParseUint16(self.Reader, self.Profile.Off_FAT32MBR_Flags + self.Offset)
+   self._Flags = result
+   self._Flags_cached = true
+   return result
+}
+
+func (self *FAT32MBR) Version() uint16 {
+   if self._Version_cached {
+       return self._Version
+   }
+   result := ParseUint16(self.Reader, self.Profile.Off_FAT32MBR_Version + self.Offset)
+   self._Version = result
+   self._Version_cached = true
+   return result
+}
+
+func (self *FAT32MBR) ClusterOfRoot() uint32 {
+   if self._ClusterOfRoot_cached {
+      return self._ClusterOfRoot
+   }
+   result := ParseUint32(self.Reader, self.Profile.Off_FAT32MBR_ClusterOfRoot + self.Offset)
+   self._ClusterOfRoot = result
+   self._ClusterOfRoot_cached = true
+   return result
+}
+
+func (self *FAT32MBR) Signature() byte {
+   if self._Signature_cached {
+       return self._Signature
+   }
+   result := ParseUint8(self.Reader, self.Profile.Off_FAT32MBR_Signature + self.Offset)
+   self._Signature = result
+   self._Signature_cached = true
+   return result
+}
+
+func (self *FAT32MBR) Volume_serial_number() uint32 {
+   if self._Volume_serial_number_cached {
+      return self._Volume_serial_number
+   }
+   result := ParseUint32(self.Reader, self.Profile.Off_FAT32MBR_Volume_serial_number + self.Offset)
+   self._Volume_serial_number = result
+   self._Volume_serial_number_cached = true
+   return result
+}
+
+
+func (self *FAT32MBR) Volume_label() string {
+  return ParseString(self.Reader, self.Profile.Off_FAT32MBR_Volume_label + self.Offset, 11)
+}
+
+
+func (self *FAT32MBR) System_id() string {
+  return ParseString(self.Reader, self.Profile.Off_FAT32MBR_System_id + self.Offset, 8)
+}
+
+func (self *FAT32MBR) Magic() uint16 {
+   if self._Magic_cached {
+       return self._Magic
+   }
+   result := ParseUint16(self.Reader, self.Profile.Off_FAT32MBR_Magic + self.Offset)
+   self._Magic = result
+   self._Magic_cached = true
+   return result
+}
+func (self *FAT32MBR) DebugString() string {
+    result := fmt.Sprintf("struct FAT32MBR @ %#x:\n", self.Offset)
+    result += fmt.Sprintf("  SectorsPerFat: %#0x\n", self.SectorsPerFat())
+    result += fmt.Sprintf("  Flags: %#0x\n", self.Flags())
+    result += fmt.Sprintf("  Version: %#0x\n", self.Version())
+    result += fmt.Sprintf("  ClusterOfRoot: %#0x\n", self.ClusterOfRoot())
+    result += fmt.Sprintf("  Signature: %#0x\n", self.Signature())
+    result += fmt.Sprintf("  Volume_serial_number: %#0x\n", self.Volume_serial_number())
+    result += fmt.Sprintf("  Volume_label: %v\n", string(self.Volume_label()))
+    result += fmt.Sprintf("  System_id: %v\n", string(self.System_id()))
+    result += fmt.Sprintf("  Magic: %#0x\n", self.Magic())
     return result
 }
 
@@ -305,7 +443,7 @@ type LFNEntry struct {
     Offset int64
     Profile *FATProfile
     
-    _Order int8
+    _Order uint8
     _Order_cached bool
 
 }
@@ -314,11 +452,11 @@ func (self *LFNEntry) Size() int {
     return 32
 }
 
-func (self *LFNEntry) Order() int8 {
+func (self *LFNEntry) Order() byte {
    if self._Order_cached {
        return self._Order
    }
-   result := ParseInt8(self.Reader, self.Profile.Off_LFNEntry_Order + self.Offset)
+   result := ParseUint8(self.Reader, self.Profile.Off_LFNEntry_Order + self.Offset)
    self._Order = result
    self._Order_cached = true
    return result
@@ -572,15 +710,6 @@ func ParseArray_FolderEntry(profile *FATProfile, reader io.ReaderAt, offset int6
       offset += int64(value.Size())
     }
     return result
-}
-
-func ParseInt8(reader io.ReaderAt, offset int64) int8 {
-    result := make([]byte, 1)
-    _, err := reader.ReadAt(result, offset)
-    if err != nil {
-       return 0
-    }
-    return int8(result[0])
 }
 
 func ParseUint16(reader io.ReaderAt, offset int64) uint16 {

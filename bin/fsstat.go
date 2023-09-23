@@ -29,6 +29,7 @@ func doFSSTAT() {
 	kingpin.FatalIfError(err, "Can not open filesystem")
 
 	fmt.Println(fat.DebugString())
+
 }
 
 func init() {

@@ -42,13 +42,14 @@ func doStat() {
 	stream, err := parser.NewFATReader(fat, stat.FirstCluster)
 	kingpin.FatalIfError(err, "Can not open stream")
 
-	fmt.Printf("\n\nSectors\n")
-	bytes_per_sector := int(fat.MBR.Bytes_per_sector())
-	sectors_per_cluster := int(fat.MBR.Sectors_per_cluster())
+	bytes_per_sector := fat.Bytes_per_sector
+	sectors_per_cluster := fat.Sectors_per_cluster
+
+	fmt.Printf("\n\nSectors (%v)\n", int64(len(stream.Runs()))*sectors_per_cluster)
 	for _, cluster := range stream.Runs() {
 		// Each cluster has this many sectors
-		for i := 0; i < sectors_per_cluster; i++ {
-			fmt.Printf("%v ", int(cluster)/bytes_per_sector+i)
+		for i := int64(0); i < sectors_per_cluster; i++ {
+			fmt.Printf("%v ", cluster/bytes_per_sector+i)
 		}
 	}
 	fmt.Println("")

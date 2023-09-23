@@ -16,6 +16,9 @@ type FATReader struct {
 	Info *DirectoryEntry
 }
 
+// If this reader was opened as a result of directory walking we know
+// the exact file size from the directory entry. Otherwise we just
+// read all available clusters
 func (self *FATReader) file_size() int64 {
 	if self.Info == nil {
 		return int64(len(self.runs)) * self.bytes_per_cluster
@@ -24,7 +27,7 @@ func (self *FATReader) file_size() int64 {
 	// Sometimes directories indicate that their size is 0 but this is
 	// not true.
 	if self.Info.IsDir && self.Info.Size == 0 {
-		return 512 * self.bytes_per_cluster
+		return int64(len(self.runs)) * self.bytes_per_cluster
 	}
 
 	return int64(self.Info.Size)
@@ -132,30 +135,17 @@ func (self *FATReader) parseFAT12(first_cluster int32) error {
 	return nil
 }
 
-func NewFATReader(context *FATContext, first_cluster int32) (*FATReader, error) {
-	// Build the runlist is advance and store in memory.
-	result := &FATReader{
-		context: context,
-		offset_to_fat: int64(context.MBR.Reserved_sectors() *
-			context.MBR.Bytes_per_sector()),
-		total_fat_size: int64(context.MBR.Sectors_per_fat() *
-			context.MBR.Bytes_per_sector()),
-		// Clusters start after the root directory.
-		offset_to_data:    context.rootOffset() + int64(context.MBR.Root_entries()*32) - 2*context.bytes_per_cluster,
-		bytes_per_cluster: context.bytes_per_cluster,
-		runs:              []int64{int64(first_cluster)},
-	}
-
-	if context.FATType() == "FAT12" {
-		return result, result.parseFAT12(first_cluster)
-	}
-
+// Parse FAT16 structures
+func (self *FATReader) parseFAT16(first_cluster int32) error {
 	current_cluster := first_cluster
-	end_of_fat := result.offset_to_fat + result.total_fat_size
+	end_of_fat := self.offset_to_fat + self.total_fat_size
+
+	max_number_of_clusters := int64(4) * 1024 * 1024 * 1024 /
+		self.context.Bytes_per_cluster
 
 	for {
-		next_cluster := ParseUint16(context.DiskReader,
-			result.offset_to_fat+int64(current_cluster)*2)
+		next_cluster := ParseUint16(self.context.DiskReader,
+			self.offset_to_fat+int64(current_cluster)*2)
 
 		// Last sector in the chain
 		if next_cluster >= 0xFFF8 {
@@ -163,17 +153,80 @@ func NewFATReader(context *FATContext, first_cluster int32) (*FATReader, error) 
 		}
 
 		// This is a bad cluster - not sure what that means?
-		if next_cluster == 0xFFF7 {
+		if next_cluster == 0xFFF7 || next_cluster <= 2 {
 			break
 		}
 
-		result.runs = append(result.runs, int64(next_cluster))
+		self.runs = append(self.runs, int64(next_cluster))
 		current_cluster = int32(next_cluster)
 
 		// The next cluster points outside the FAT!
-		if int64(next_cluster)*2 > end_of_fat {
+		if int64(next_cluster)*2 > end_of_fat ||
+			int64(len(self.runs)) > max_number_of_clusters {
 			break
 		}
+	}
+
+	return nil
+}
+
+// Parse FAT32 structures
+func (self *FATReader) parseFAT32(first_cluster int32) error {
+	current_cluster := first_cluster
+	end_of_fat := self.offset_to_fat + self.total_fat_size
+
+	max_number_of_clusters := int64(4) * 1024 * 1024 * 1024 /
+		self.context.Bytes_per_cluster
+
+	for {
+		next_cluster := ParseUint32(self.context.DiskReader,
+			self.offset_to_fat+int64(current_cluster)*4) & 0x0FFFFFFF
+
+		// Last sector in the chain
+		if next_cluster >= 0x0FFFFFF8 {
+			break
+		}
+
+		// This is a bad cluster - not sure what that means?
+		if next_cluster == 0x0FFFFF7 || next_cluster <= 2 {
+			break
+		}
+
+		self.runs = append(self.runs, int64(next_cluster))
+		current_cluster = int32(next_cluster)
+
+		// The next cluster points outside the FAT!
+		if int64(next_cluster)*2 > end_of_fat ||
+			int64(len(self.runs)) > max_number_of_clusters {
+			break
+		}
+	}
+
+	return nil
+}
+
+func NewFATReader(context *FATContext, first_cluster int32) (*FATReader, error) {
+	// Build the runlist is advance and store in memory.
+	result := &FATReader{
+		context:        context,
+		offset_to_fat:  int64(context.reserved_sectors * context.Bytes_per_sector),
+		total_fat_size: int64(context.sectors_per_fat * context.Bytes_per_sector),
+		// Clusters start after the root directory.
+		offset_to_data:    context.rootOffset() + int64(context.MBR.Root_entries()*32) - 2*context.Bytes_per_cluster,
+		bytes_per_cluster: context.Bytes_per_cluster,
+		runs:              []int64{int64(first_cluster)},
+	}
+
+	if context.FATType() == "FAT12" {
+		return result, result.parseFAT12(first_cluster)
+	}
+
+	if context.FATType() == "FAT16" {
+		return result, result.parseFAT16(first_cluster)
+	}
+
+	if context.FATType() == "FAT32" {
+		return result, result.parseFAT32(first_cluster)
 	}
 
 	return result, nil

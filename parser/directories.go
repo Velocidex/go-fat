@@ -44,10 +44,11 @@ func (self *FATContext) Stat(path string) (*DirectoryEntry, error) {
 	// Start at the root directory
 	stream := self.root_directory
 	directory_size := 512
-	var err error
 
 component_search:
 	for idx, component := range components {
+		component = strings.ToLower(component)
+
 		entries := self.listDirectory(stream, directory_size)
 		if len(entries) == 0 {
 			return nil, notFoundError
@@ -64,10 +65,14 @@ component_search:
 
 				// Recurse into directories
 				if e.IsDir {
-					stream, err = NewFATReader(self, e.FirstCluster)
+					fat_stream, err := NewFATReader(self, e.FirstCluster)
 					if err != nil {
 						return nil, err
 					}
+					// Number of entries in this directory
+					directory_size = int(fat_stream.file_size()) / 32
+					stream = fat_stream
+
 					continue component_search
 				}
 			}
@@ -93,28 +98,32 @@ func (self *FATContext) listDirectory(
 
 	type name_fragment struct {
 		order int
+		idx   int
 		name  string
 	}
 
 	var current_name []name_fragment
-	for _, entry := range entries {
-		//fmt.Println(entry.DebugString())
+	for idx, entry := range entries {
+		// fmt.Println(entry.DebugString())
 
 		if entry.Attribute().IsSet("LFN") {
 			lfn_entry := self.Profile.LFNEntry(stream, entry.Offset)
 			current_name = append(current_name, name_fragment{
 				order: int(lfn_entry.Order()),
+				idx:   idx,
 				name:  lfn_entry.Name1() + lfn_entry.Name2() + lfn_entry.Name3(),
 			})
 			continue
 		}
 
-		if len(current_name) > 2 {
-			DlvBreak()
-		}
-
 		name := ""
 		sort.Slice(current_name, func(i, j int) bool {
+			// If the order is the same in all parts then use the
+			// index as a tie breaker.
+			if current_name[i].order == current_name[j].order {
+				return current_name[i].idx > current_name[j].idx
+			}
+
 			return current_name[i].order < current_name[j].order
 		})
 
@@ -145,6 +154,7 @@ func (self *FATContext) listDirectory(
 		deleted := false
 		if len(short_name) > 0 && short_name[0] == 0xe5 {
 			deleted = true
+			short_name = "_" + short_name[1:]
 		}
 
 		results = append(results, &DirectoryEntry{
