@@ -80,11 +80,18 @@ func (self *FATContext) rootOffset() int64 {
 
 func (self *FATContext) ListDirectory(path string) ([]*DirectoryEntry, error) {
 	components := GetComponents(path)
+
+	return self.ListDirectoryComponents(components)
+}
+
+func (self *FATContext) ListDirectoryComponents(
+	components []string) ([]*DirectoryEntry, error) {
+
 	if len(components) == 0 {
 		return self.listDirectory(self.root_directory, 512), nil
 	}
 
-	stream, err := self.Open(path)
+	stream, err := self.OpenComponents(components)
 	if err != nil {
 		return nil, err
 	}
