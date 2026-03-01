@@ -7,5 +7,5 @@ import (
 
 func Dump(v interface{}) {
 	serialized, _ := json.MarshalIndent(v, " ", " ")
-	fmt.Printf(string(serialized))
+	fmt.Printf("%v", string(serialized))
 }
