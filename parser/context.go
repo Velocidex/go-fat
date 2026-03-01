@@ -100,9 +100,15 @@ func (self *FATContext) ListDirectoryComponents(
 		return nil, errors.New("Not a directory")
 	}
 
-	// The number of entries is related to the total size of the
-	// stream.
+	// Cap the number of entries to a safe maximum. file_size() for
+	// directories is derived from the cluster chain, but a corrupt
+	// chain that hits the volume-size bound still produces a large
+	// value; this prevents a runaway pre-allocation.
+	const maxDirectoryEntries = 65536
 	directory_size := int(stream.file_size()) / 32
+	if directory_size > maxDirectoryEntries {
+		directory_size = maxDirectoryEntries
+	}
 	return self.listDirectory(stream, directory_size), nil
 }
 

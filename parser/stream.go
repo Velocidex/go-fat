@@ -24,9 +24,12 @@ func (self *FATReader) file_size() int64 {
 		return int64(len(self.runs)) * self.bytes_per_cluster
 	}
 
-	// Sometimes directories indicate that their size is 0 but this is
-	// not true.
-	if self.Info.IsDir && self.Info.Size == 0 {
+	// For directories, never trust the Size field from the directory
+	// entry. The FAT spec says it should always be 0; a non-zero value
+	// indicates corruption (e.g. garbage left in deleted or
+	// uninitialized entries). Derive the size from the cluster chain
+	// instead so that a garbage Size cannot cause a huge allocation.
+	if self.Info.IsDir {
 		return int64(len(self.runs)) * self.bytes_per_cluster
 	}
 
@@ -109,6 +112,9 @@ func (self *FATReader) readFAT12Entry(cluster int32) uint16 {
 func (self *FATReader) parseFAT12(first_cluster int32) error {
 	current_cluster := first_cluster
 	end_of_fat := self.offset_to_fat + self.total_fat_size
+	// A valid chain cannot be longer than the total number of clusters
+	// on the volume; exceeding this means the chain is circular.
+	max_clusters := self.context.total_sectors / self.context.Sectors_per_cluster
 
 	for {
 		next_cluster := self.readFAT12Entry(current_cluster)
@@ -126,8 +132,10 @@ func (self *FATReader) parseFAT12(first_cluster int32) error {
 		self.runs = append(self.runs, int64(next_cluster))
 		current_cluster = int32(next_cluster)
 
-		// The next cluster points outside the FAT!
-		if int64(next_cluster+next_cluster>>1) > end_of_fat {
+		// The next cluster points outside the FAT, or the chain
+		// exceeds the volume cluster count — circular/corrupt chain.
+		if int64(next_cluster+next_cluster>>1) > end_of_fat ||
+			int64(len(self.runs)) > max_clusters {
 			break
 		}
 	}
@@ -139,9 +147,9 @@ func (self *FATReader) parseFAT12(first_cluster int32) error {
 func (self *FATReader) parseFAT16(first_cluster int32) error {
 	current_cluster := first_cluster
 	end_of_fat := self.offset_to_fat + self.total_fat_size
-
-	max_number_of_clusters := int64(4) * 1024 * 1024 * 1024 /
-		self.context.Bytes_per_cluster
+	// A valid chain cannot be longer than the total number of clusters
+	// on the volume; exceeding this means the chain is circular.
+	max_clusters := self.context.total_sectors / self.context.Sectors_per_cluster
 
 	for {
 		next_cluster := ParseUint16(self.context.DiskReader,
@@ -160,9 +168,10 @@ func (self *FATReader) parseFAT16(first_cluster int32) error {
 		self.runs = append(self.runs, int64(next_cluster))
 		current_cluster = int32(next_cluster)
 
-		// The next cluster points outside the FAT!
+		// The next cluster points outside the FAT, or the chain
+		// exceeds the volume cluster count — circular/corrupt chain.
 		if int64(next_cluster)*2 > end_of_fat ||
-			int64(len(self.runs)) > max_number_of_clusters {
+			int64(len(self.runs)) > max_clusters {
 			break
 		}
 	}
@@ -174,9 +183,9 @@ func (self *FATReader) parseFAT16(first_cluster int32) error {
 func (self *FATReader) parseFAT32(first_cluster int32) error {
 	current_cluster := first_cluster
 	end_of_fat := self.offset_to_fat + self.total_fat_size
-
-	max_number_of_clusters := int64(4) * 1024 * 1024 * 1024 /
-		self.context.Bytes_per_cluster
+	// A valid chain cannot be longer than the total number of clusters
+	// on the volume; exceeding this means the chain is circular.
+	max_clusters := self.context.total_sectors / self.context.Sectors_per_cluster
 
 	for {
 		next_cluster := ParseUint32(self.context.DiskReader,
@@ -195,9 +204,10 @@ func (self *FATReader) parseFAT32(first_cluster int32) error {
 		self.runs = append(self.runs, int64(next_cluster))
 		current_cluster = int32(next_cluster)
 
-		// The next cluster points outside the FAT!
+		// The next cluster points outside the FAT, or the chain
+		// exceeds the volume cluster count — circular/corrupt chain.
 		if int64(next_cluster)*2 > end_of_fat ||
-			int64(len(self.runs)) > max_number_of_clusters {
+			int64(len(self.runs)) > max_clusters {
 			break
 		}
 	}
